@@ -5,70 +5,119 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
+
+	"github.com/kevinfalting/go-pomo/session"
 )
 
 var (
 	rounds = flag.Int("rounds", 3, "The number of focus rounds per cycle/long break.")
 	short  = flag.Int("short", 5, "The duration of the short breaks in minutes.")
 	long   = flag.Int("long", 15, "The duration of the long breaks in minutes.")
-	study  = flag.Int("study", 25, "The number of minutes per focus session.")
+	focus  = flag.Int("focus", 25, "The number of minutes per focus session.")
+	// auto    = flag.Bool("auto", false, "Auto progress to next round without input.")
+	// sounds  = flag.Bool("sounds", true, "Play sounds to indicate round changes.")
+	seconds = flag.Bool("seconds", false, "Will instead count the break time in seconds instead of minutes")
+
+	done = make(chan bool)
+
+	// S is the global state
+	S = session.Session{}
 )
-
-type session struct {
-	startTime  time.Time
-	endTime    time.Time
-	pausedTime time.Duration
-	focusTime  time.Duration
-	rounds     int
-}
-
-func (s session) elapsed() time.Duration {
-	return time.Since(s.startTime)
-}
 
 func main() {
 	flag.Parse()
 
 	// Wait for user input to start
-	waitForUserInputToProceed()
+	waitForInput("Press enter to begin...")
 
-	s := session{}
-	s.startTime = time.Now()
+	// Start the session
+	config := session.Config{}
+	config.Rounds = *rounds
+	config.Short = session.ConfigTime(*short)
+	config.Long = session.ConfigTime(*long)
+	config.Focus = session.ConfigTime(*focus)
+	config.Auto = *auto
+	config.Sounds = *sounds
+	config.Seconds = *seconds
+	S.Init(config)
+	go tickTock()
 
-	// start a timer
-	ticker := time.NewTicker(1 * time.Second)
-	done := make(chan bool)
-	go tickTock(ticker, done)
-
-	// TODO: present options
-	// p - pause
-	// s - stop
-	// g - go/start
-	waitForUserInputToProceed()
-	ticker.Stop()
-	done <- true
-	fmt.Println("Ticker stopped")
-	fmt.Println(s.elapsed())
-}
-
-func waitForUserInputToProceed() {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Press enter to begin...")
-	_, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+	// loop as long as the user wants
+	for {
+		waitForInput("p: pause, r: resume, s: show stats, q: quit")
 	}
 }
 
-func tickTock(ticker *time.Ticker, done chan bool) {
+func waitForInput(message string) {
+	fmt.Println(message)
+
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		exit(1, err)
+	}
+
+	input = strings.Trim(input, "\n")
+	input = strings.ToLower(input)
+
+	switch input {
+	case "":
+		// Proceeding
+	case "p":
+		// pause the timer
+		S.Pause()
+	case "q":
+		exit(0, nil)
+	case "r":
+		// resume session
+		S.Unpause()
+	case "s":
+		// show stats, make no state changes
+		fmt.Println(S)
+	default:
+		waitForInput(fmt.Sprintf("Sorry, I don't know what to do with %q\n", input))
+	}
+}
+
+// tickTock handles decisions based on the clock
+func tickTock() {
+	ticker := time.NewTicker(1 * time.Second)
 	for {
 		select {
 		case <-done:
+			ticker.Stop()
 			return
 		case t := <-ticker.C:
-			fmt.Println("Tick at", t)
+
+			// if the state is paused, we don't want to allow any other state changes to occur
+			if S.IsPaused() {
+				continue
+			}
+
+			if S.IsRoundOver() {
+				// fmt.Println(t) // remove when done with testing
+				S.GoToNextState()
+				fmt.Println(S)
+			}
+
+			_ = t // remove after testing
+
 		}
 	}
+}
+
+func exit(statusCode int, err error) {
+	// If you try to quit at the first prompt, don't pass a done signal. Will panic.
+	if !S.GetStateStartTime().IsZero() {
+		done <- true
+	}
+	S.EndSession()
+	fmt.Println(S)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+	os.Exit(statusCode)
 }
