@@ -74,11 +74,11 @@ func (s *Session) Init(c Config) {
 func (s Session) String() string {
 	// TODO: return a formatted report of all the statistics from the session.
 	r := "\n----Session Stats----\n"
-	r += fmt.Sprintf("Time in Focus: %v\n", s.stats.focusTime)
-	r += fmt.Sprintf("Time spent paused: %v\n", s.stats.pausedTime)
-	r += fmt.Sprintf("Time spent in breaks: %v\n", s.stats.breakTime)
-	r += fmt.Sprintf("Total elapsed time: %v\n", time.Now().Sub(s.stats.startTime))
-	r += fmt.Sprintf("Total elapsed rounds: %d\n", s.stats.elapsedRounds)
+	r += fmt.Sprintf("Time in Focus: %v\n", time.Duration(s.stats.focusTime).Round(1*time.Second))
+	r += fmt.Sprintf("Time spent paused: %v\n", time.Duration(s.stats.pausedTime).Round(1*time.Second))
+	r += fmt.Sprintf("Time spent in breaks: %v\n", time.Duration(s.stats.breakTime).Round(1*time.Second))
+	r += fmt.Sprintf("Total elapsed time: %v\n", time.Duration(time.Now().Sub(s.stats.startTime)).Round(1*time.Second))
+	r += fmt.Sprintf("Total elapsed rounds: %d\n", time.Duration(s.stats.elapsedRounds).Round(1*time.Second))
 
 	r += fmt.Sprintf("Current State: %d\n", s.state)
 
