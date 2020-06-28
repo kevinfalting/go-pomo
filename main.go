@@ -38,8 +38,8 @@ func main() {
 	config.Short = session.ConfigTime(*short)
 	config.Long = session.ConfigTime(*long)
 	config.Focus = session.ConfigTime(*focus)
-	config.Auto = *auto
-	config.Sounds = *sounds
+	// config.Auto = *auto
+	// config.Sounds = *sounds
 	config.Seconds = *seconds
 	S.Init(config)
 	go tickTock()
