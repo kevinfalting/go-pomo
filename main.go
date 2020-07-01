@@ -16,11 +16,14 @@ var (
 	short  = flag.Int("short", 5, "The duration of the short breaks in minutes.")
 	long   = flag.Int("long", 15, "The duration of the long breaks in minutes.")
 	focus  = flag.Int("focus", 25, "The number of minutes per focus session.")
-	// auto    = flag.Bool("auto", false, "Auto progress to next round without input.")
+	auto   = flag.Bool("auto", false, "Auto progress to next round without input.")
 	// sounds  = flag.Bool("sounds", true, "Play sounds to indicate round changes.")
 	seconds = flag.Bool("seconds", false, "Will instead count the break time in seconds instead of minutes")
 
-	done = make(chan bool)
+	done    = make(chan bool)
+	proceed = make(chan bool)
+
+	allowProceed = false
 
 	// S is the global state
 	S = session.Session{}
@@ -38,7 +41,7 @@ func main() {
 	config.Short = session.ConfigTime(*short)
 	config.Long = session.ConfigTime(*long)
 	config.Focus = session.ConfigTime(*focus)
-	// config.Auto = *auto
+	config.Auto = *auto
 	// config.Sounds = *sounds
 	config.Seconds = *seconds
 	S.Init(config)
@@ -65,6 +68,9 @@ func waitForInput(message string) {
 	switch input {
 	case "":
 		// Proceeding
+		if !S.GetStateStartTime().IsZero() && !S.IsPaused() && allowProceed {
+			proceed <- true
+		}
 	case "p":
 		// pause the timer
 		S.Pause()
@@ -73,6 +79,9 @@ func waitForInput(message string) {
 	case "r":
 		// resume session
 		S.Unpause()
+		if !S.GetStateStartTime().IsZero() && !S.IsPaused() {
+			proceed <- true
+		}
 	case "s":
 		// show stats, make no state changes
 		fmt.Println(S)
@@ -97,10 +106,17 @@ func tickTock() {
 			}
 
 			if S.IsRoundOver() {
-				// fmt.Println(t) // remove when done with testing
+				if !S.ShouldAutoProgress() {
+					fmt.Println("Press enter to proceed.")
+					allowProceed = true
+					<-proceed
+					allowProceed = false
+					fmt.Println("Proceeding....")
+				}
 				S.GoToNextState()
-				fmt.Println(S)
 			}
+
+			// TODO: Do something here to show progress... like a progress bar or how much time is left? But replace the line, don't keep writing newlines.
 
 			_ = t // remove after testing
 
